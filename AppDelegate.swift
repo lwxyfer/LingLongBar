@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             statusItemManager: statusItemManager,
             menuBarScanner: menuBarScanner
         )
-        popover.contentSize = NSSize(width: 320, height: 280)
+        popover.contentSize = NSSize(width: 340, height: 400)
         popover.contentViewController = NSHostingController(rootView: contentView)
     }
 

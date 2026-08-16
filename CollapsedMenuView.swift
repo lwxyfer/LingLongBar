@@ -7,177 +7,103 @@ private let clickLogger = Logger(subsystem: AppConstants.lingLongBarBundleID, ca
 struct CollapsedMenuView: View {
     @ObservedObject var statusItemManager: StatusItemManager
     let menuBarScanner: MenuBarScanner
-    @State private var isHoveringItem: UUID? = nil
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            headerSection
-            dividerSection
-            contentSection
-        }
-        .padding(12)
-        .frame(width: 320)
-        .frame(minHeight: 200, maxHeight: 400)
-        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
-    }
-    
-    private var headerSection: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.8), Color.purple.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
-                
-                Image(systemName: "square.stack.3d.up.fill")
-                    .foregroundColor(.white)
-                    .font(.system(size: 18, weight: .semibold))
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("LingLongBar")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
                 Text(statusText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.headline.weight(.semibold))
+
+                Spacer()
+
+                settingsButton
             }
-            
-            Spacer()
-            
-            settingsButton
-        }
-        .padding(.bottom, 4)
-    }
-    
-    private var statusText: String {
-        let count = statusItemManager.collapsedItems.count
-        if count == 0 {
-            return "所有图标都已显示"
-        } else {
-            return "\(count) 个图标已收纳"
-        }
-    }
-    
-    private var dividerSection: some View {
-        Divider()
-            .padding(.vertical, 8)
-    }
-    
-    private var contentSection: some View {
-        Group {
+            .padding(.horizontal, 4)
+
             if statusItemManager.collapsedItems.isEmpty {
                 emptyState
             } else {
-                iconsGrid
+                iconsList
+            }
+        }
+        .padding(16)
+        .frame(width: 340, height: 400)
+        .modifier(LiquidGlassSurface())
+    }
+
+    private var statusText: String {
+        "\(statusItemManager.collapsedItems.count) 个图标已收纳"
+    }
+
+    private var iconsList: some View {
+        ScrollView {
+            LiquidGlassContainer(spacing: 8) {
+                LazyVStack(spacing: 8) {
+                    ForEach(statusItemManager.collapsedItems) { item in
+                        StatusItemRowView(
+                            item: item,
+                            menuBarScanner: menuBarScanner
+                        )
+                    }
+                }
+                .padding(2)
             }
         }
         .frame(maxHeight: .infinity)
     }
-    
+
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.15))
-                    .frame(width: 64, height: 64)
-                
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.green)
-            }
-            
-            VStack(spacing: 4) {
-                Text("所有图标都已显示")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Text("菜单栏空间充足")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    private var iconsGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: Self.gridColumns, spacing: 12) {
-                ForEach(statusItemManager.collapsedItems) { item in
-                    StatusItemIconView(
-                        item: item,
-                        menuBarScanner: menuBarScanner,
-                        isHovering: isHoveringItem == item.id
-                    )
-                    .onHover { hovering in
-                        isHoveringItem = hovering ? item.id : nil
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        }
+        Text("暂无收纳图标")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private static let gridColumns = [
-        GridItem(.adaptive(minimum: 68, maximum: 80), spacing: 10)
-    ]
-    
     private var settingsButton: some View {
         Button(action: {
             NotificationCenter.default.post(name: NSNotification.Name("OpenSettings"), object: nil)
         }) {
-            Image(systemName: "gearshape.fill")
-                .foregroundColor(.secondary)
-                .font(.system(size: 14))
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(Color.primary.opacity(0.06))
-                )
+            Image(systemName: "gearshape")
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 32, height: 32)
         }
         .buttonStyle(.plain)
+        .modifier(LiquidGlassButtonSurface())
         .help("设置")
     }
 }
 
-struct StatusItemIconView: View {
+struct StatusItemRowView: View {
     let item: StatusItemInfo
     let menuBarScanner: MenuBarScanner
-    let isHovering: Bool
+    @State private var isHovering = false
 
     var body: some View {
-        VStack(spacing: 6) {
-            iconContainer
-            titleLabel
+        Button(action: handleClick) {
+            HStack(spacing: 12) {
+                iconContent
+                    .frame(width: 30, height: 30)
+
+                Text(item.title)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 52)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            handleClick()
-        }
-        .onTapGesture(count: 1) {
-            handleClick()
-        }
+        .buttonStyle(.plain)
+        .modifier(LiquidGlassRowSurface(isHighlighted: isHovering))
+        .onHover { isHovering = $0 }
         .help(item.title)
         .contextMenu {
             contextMenuItems
-        }
-    }
-
-    private var iconContainer: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isHovering ? Color.primary.opacity(0.08) : Color.clear)
-                .frame(width: 52, height: 52)
-                .scaleEffect(isHovering ? 1.05 : 1.0)
-                .animation(.easeInOut(duration: 0.15), value: isHovering)
-
-            iconContent
         }
     }
 
@@ -187,31 +113,12 @@ struct StatusItemIconView: View {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 30, height: 30)
             } else {
                 Image(systemName: "app.dashed")
-                    .font(.system(size: 24))
+                    .font(.system(size: 20))
                     .foregroundColor(.secondary)
             }
         }
-    }
-
-    private var titleLabel: some View {
-        Text(displayTitle)
-            .font(.caption2)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(width: 68)
-            .foregroundColor(isHovering ? .primary : .secondary)
-    }
-
-    private var displayTitle: String {
-        let title = item.title
-        if title.count > 8 {
-            let index = title.index(title.startIndex, offsetBy: 8)
-            return String(title[..<index]) + "..."
-        }
-        return title
     }
 
     private var contextMenuItems: some View {
@@ -252,6 +159,71 @@ struct StatusItemIconView: View {
         let runningApps = workspace.runningApplications.filter { $0.bundleIdentifier == item.bundleIdentifier }
         for app in runningApps {
             app.terminate()
+        }
+    }
+}
+
+private struct LiquidGlassSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: .rect(cornerRadius: 22))
+        } else {
+            content
+                .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+}
+
+private struct LiquidGlassContainer<Content: View>: View {
+    let spacing: CGFloat
+    let content: () -> Content
+
+    init(spacing: CGFloat, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+private struct LiquidGlassRowSurface: ViewModifier {
+    let isHighlighted: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
+        } else {
+            content
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.primary.opacity(isHighlighted ? 0.1 : 0.045))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+}
+
+private struct LiquidGlassButtonSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.clear.interactive(), in: .circle)
+        } else {
+            content
+                .background(Circle().fill(Color.primary.opacity(0.06)))
+                .clipShape(Circle())
         }
     }
 }

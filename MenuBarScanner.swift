@@ -89,24 +89,17 @@ final class MenuBarScanner {
                 continue
             }
 
-            // AXUIElement 是 CoreFoundation 类型，直接强转（AXExtrasMenuBar 成功返回即为 AXUIElement）
+            // AXExtrasMenuBar 通常直接返回图标本身，而不是包含图标的容器。
+            // 只有返回值确实是 AXMenuBar 时，才需要继续读取 AXChildren。
             let extrasBarElement = extrasBar as! AXUIElement
+            let menuBarItems = menuBarExtraElements(from: extrasBarElement)
 
-            var childrenValue: AnyObject?
-            let childResult = AXUIElementCopyAttributeValue(
-                extrasBarElement,
-                kAXChildrenAttribute as CFString,
-                &childrenValue
-            )
-
-            guard childResult == .success,
-                  let children = childrenValue as? [AXUIElement],
-                  !children.isEmpty else {
-                logger.warning("AXExtrasMenuBar children 读取失败 bundleID=\(bundleID, privacy: .public) err=\(childResult.rawValue, privacy: .public)")
+            guard !menuBarItems.isEmpty else {
+                logger.warning("AXExtrasMenuBar 没有可用图标 bundleID=\(bundleID, privacy: .public)")
                 continue
             }
 
-            for child in children {
+            for child in menuBarItems {
                 guard let item = buildStatusItem(from: child, app: app, bundleID: bundleID) else { continue }
                 items.append(item)
                 scannedApps.append("\(bundleID) [w=\(item.frame.width), x=\(item.frame.minX)]")
@@ -122,6 +115,36 @@ final class MenuBarScanner {
         }
 
         return items
+    }
+
+    /// 将 AXExtrasMenuBar 转换为一个或多个图标元素。
+    ///
+    /// Apple 的 accessibilityExtrasMenuBar 属性返回应用菜单栏中的图标本身；
+    /// 某些实现可能返回 AXMenuBar 容器，因此保留对 AXChildren 的兼容处理。
+    private func menuBarExtraElements(from extrasBar: AXUIElement) -> [AXUIElement] {
+        var roleValue: AnyObject?
+        AXUIElementCopyAttributeValue(
+            extrasBar,
+            kAXRoleAttribute as CFString,
+            &roleValue
+        )
+
+        guard roleValue as? String == "AXMenuBar" else {
+            return [extrasBar]
+        }
+
+        var childrenValue: AnyObject?
+        let result = AXUIElementCopyAttributeValue(
+            extrasBar,
+            kAXChildrenAttribute as CFString,
+            &childrenValue
+        )
+
+        guard result == .success,
+              let children = childrenValue as? [AXUIElement] else {
+            return []
+        }
+        return children
     }
 
     /// 将单个 AX 子元素组装成 StatusItemInfo
@@ -244,14 +267,8 @@ final class MenuBarScanner {
 
             guard result == .success, let extrasBar = extrasBar else { continue }
 
-            var childrenValue: AnyObject?
-            AXUIElementCopyAttributeValue(
-                extrasBar as! AXUIElement,
-                kAXChildrenAttribute as CFString,
-                &childrenValue
-            )
-
-            guard let children = childrenValue as? [AXUIElement], let first = children.first else { continue }
+            let extrasBarElement = extrasBar as! AXUIElement
+            guard let first = menuBarExtraElements(from: extrasBarElement).first else { continue }
 
             let frame = getAXFrame(first)
             guard frame.width > 0 else { continue }
@@ -399,17 +416,12 @@ final class MenuBarScanner {
 
             guard result == .success, let extrasBar = extrasBar else { continue }
 
-            var childrenValue: AnyObject?
-            AXUIElementCopyAttributeValue(
-                extrasBar as! AXUIElement,
-                kAXChildrenAttribute as CFString,
-                &childrenValue
-            )
-
-            guard let children = childrenValue as? [AXUIElement], !children.isEmpty else { continue }
+            let extrasBarElement = extrasBar as! AXUIElement
+            let menuBarItems = menuBarExtraElements(from: extrasBarElement)
+            guard !menuBarItems.isEmpty else { continue }
 
             // 返回第一个有效子元素（大多数状态栏 app 只有一个图标）
-            return children.first
+            return menuBarItems.first
         }
 
         return nil
